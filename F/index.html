@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgriHub - Blockchain Farmer Hub</title>
+  <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/web3/1.5.2/web3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@10"></script>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <a class="navbar-brand" href="#">AgriHub</a>
+    <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navbarNav">
+      <ul class="navbar-nav ml-auto">
+        <li class="nav-item active">
+          <a class="nav-link" href="#">Home</a>
+        </li>
+        <li class="nav-item">
+          <button id="connectButton" class="btn btn-primary">Connect MetaMask</button>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="container mt-5">
+    <!-- Product Form -->
+    <h3>Add Product</h3>
+    <form id="productForm">
+      <div class="form-group">
+        <label for="productName">Product Name</label>
+        <input type="text" class="form-control" id="productName" placeholder="Enter product name" required>
+      </div>
+      <div class="form-group">
+        <label for="productQuantity">Quantity</label>
+        <input type="number" class="form-control" id="productQuantity" placeholder="Enter quantity" required>
+      </div>
+      <div class="form-group">
+        <label for="productPrice">Price per Unit (Wei)</label>
+        <input type="number" class="form-control" id="productPrice" placeholder="Enter price" required>
+      </div>
+      <button type="submit" class="btn btn-primary">Add Product</button>
+    </form>
+
+    <hr>
+
+    <!-- Add Product to Hub -->
+    <h3>Add Product to Hub</h3>
+    <form id="addProductToHubForm">
+      <div class="form-group">
+        <label for="hubProductName">Product Name</label>
+        <input type="text" class="form-control" id="hubProductName" placeholder="Enter product name" required>
+      </div>
+      <div class="form-group">
+        <label for="hubQuantity">Quantity</label>
+        <input type="number" class="form-control" id="hubQuantity" placeholder="Enter quantity" required>
+      </div>
+      <button type="submit" class="btn btn-success">Add to Hub</button>
+    </form>
+
+    <hr>
+
+    <!-- Transfer Product -->
+    <h3>Transfer Product</h3>
+    <form id="transferProductForm">
+      <div class="form-group">
+        <label for="transferProductName">Product Name</label>
+        <input type="text" class="form-control" id="transferProductName" placeholder="Enter product name" required>
+      </div>
+      <div class="form-group">
+        <label for="transferQuantity">Quantity</label>
+        <input type="number" class="form-control" id="transferQuantity" placeholder="Enter quantity" required>
+      </div>
+      <div class="form-group">
+        <label for="transferFarmerAddress">To Farmer's Address</label>
+        <input type="text" class="form-control" id="transferFarmerAddress" placeholder="Enter farmer address" required>
+      </div>
+      <button type="submit" class="btn btn-warning">Transfer Product</button>
+    </form>
+
+    <hr>
+
+    <!-- Display Farmer Products -->
+    <h3>My Products</h3>
+    <div id="farmerProducts">
+      <!-- List of products will be dynamically loaded here -->
+    </div>
+
+  </div>
+
+  <!-- Scripts -->
+  <script>
+    let web3;
+    let contract;
+    let accounts;
+    const contractAddress = "0x49b92c075108E02F12dB391017069A3C5E5f8FCC"; // Add your deployed contract address here
+
+    // Updated Contract ABI (replace with your actual ABI)
+    const abi = [
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "productName",
+          "type": "string"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "fixedPrice",
+          "type": "uint256"
+        }
+      ],
+      "name": "FixedPriceUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "farmer",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "quantity",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "pricePerUnit",
+          "type": "uint256"
+        }
+      ],
+      "name": "ProductAdded",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "productName",
+          "type": "string"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "farmer",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "quantity",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "fixedPrice",
+          "type": "uint256"
+        }
+      ],
+      "name": "ProductAddedToHub",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "string",
+          "name": "productName",
+          "type": "string"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "fromFarmer",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "toFarmer",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "quantity",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "fixedPrice",
+          "type": "uint256"
+        }
+      ],
+      "name": "ProductTransferred",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        },
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "hubProducts",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function",
+      "constant": true
+    },
+    {
+      "inputs": [],
+      "name": "priceCeiling",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function",
+      "constant": true
+    },
+    {
+      "inputs": [],
+      "name": "priceFloor",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function",
+      "constant": true
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        },
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "name": "productBids",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "quantity",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "pricePerUnit",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "farmer",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function",
+      "constant": true
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "name": "productList",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function",
+      "constant": true
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        }
+      ],
+      "name": "products",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "internalType": "uint256",
+          "name": "totalQuantity",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "fixedPrice",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "isFixedPriceSet",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function",
+      "constant": true
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "_name",
+          "type": "string"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_quantity",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_pricePerUnit",
+          "type": "uint256"
+        }
+      ],
+      "name": "addProduct",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "_name",
+          "type": "string"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_quantity",
+          "type": "uint256"
+        }
+      ],
+      "name": "addProductToHub",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "_name",
+          "type": "string"
+        },
+        {
+          "internalType": "address",
+          "name": "_toFarmer",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_quantity",
+          "type": "uint256"
+        }
+      ],
+      "name": "transferProduct",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_farmer",
+          "type": "address"
+        }
+      ],
+      "name": "getFarmerProducts",
+      "outputs": [
+        {
+          "internalType": "string[]",
+          "name": "",
+          "type": "string[]"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "",
+          "type": "uint256[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function",
+      "constant": true
+    }
+    ];
+
+    // Initialize Web3
+    async function initializeWeb3() {
+      if (typeof window.ethereum !== "undefined") {
+        web3 = new Web3(window.ethereum);
+
+        // Check if MetaMask is connected (accounts available)
+        try {
+          // Request accounts from MetaMask
+          accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+
+          // Listen for account changes
+          window.ethereum.on('accountsChanged', function (accounts) {
+            console.log('Accounts changed: ', accounts);
+            accounts = accounts;
+          });
+
+          // Listen for network changes
+          window.ethereum.on('chainChanged', (chainId) => {
+            console.log('Network changed: ', chainId);
+            window.location.reload();
+          });
+
+          contract = new web3.eth.Contract(abi, contractAddress);
+
+          // Inform the user
+          Swal.fire('Success', 'MetaMask connected successfully!', 'success');
+        } catch (error) {
+          console.error("Connection failed:", error);
+          Swal.fire('Error', 'Failed to connect MetaMask', 'error');
+        }
+      } else {
+        // MetaMask is not installed
+        Swal.fire('Error', 'Please install MetaMask to interact with the dApp.', 'error');
+      }
+    }
+
+    // Event Listener for the Connect Button
+    document.getElementById('connectButton').addEventListener('click', initializeWeb3);
+
+    // Event Listeners for forms
+    document.getElementById('productForm').addEventListener('submit', addProduct);
+    document.getElementById('addProductToHubForm').addEventListener('submit', addProductToHub);
+    document.getElementById('transferProductForm').addEventListener('submit', transferProduct);
+
+    // Add Product to Contract
+    async function addProduct(event) {
+      event.preventDefault();
+      const productName = document.getElementById('productName').value;
+      const quantity = document.getElementById('productQuantity').value;
+      const price = document.getElementById('productPrice').value;
+
+      contract.methods.addProduct(productName, quantity, price).send({ from: accounts[0] })
+        .on('receipt', function (receipt) {
+          Swal.fire('Success', 'Product added successfully!', 'success');
+        }).on('error', function (error) {
+          Swal.fire('Error', 'Failed to add product', 'error');
+        });
+    }
+
+    // Add Product to Hub
+    async function addProductToHub(event) {
+      event.preventDefault();
+      const productName = document.getElementById('hubProductName').value;
+      const quantity = document.getElementById('hubQuantity').value;
+
+      contract.methods.addProductToHub(productName, quantity).send({ from: accounts[0] })
+        .on('receipt', function (receipt) {
+          Swal.fire('Success', 'Product added to hub!', 'success');
+        }).on('error', function (error) {
+          Swal.fire('Error', 'Failed to add product to hub', 'error');
+        });
+    }
+
+    // Transfer Product
+    async function transferProduct(event) {
+      event.preventDefault();
+      const productName = document.getElementById('transferProductName').value;
+      const quantity = document.getElementById('transferQuantity').value;
+      const farmerAddress = document.getElementById('transferFarmerAddress').value;
+
+      contract.methods.transferProduct(productName, farmerAddress, quantity).send({ from: accounts[0] })
+        .on('receipt', function (receipt) {
+          Swal.fire('Success', 'Product transferred successfully!', 'success');
+        }).on('error', function (error) {
+          Swal.fire('Error', 'Failed to transfer product', 'error');
+        });
+    }
+
+    // Display Farmer's Products
+    async function getFarmerProducts() {
+      const products = await contract.methods.getFarmerProducts(accounts[0]).call();
+
+      let productList = '';
+      for (let i = 0; i < products[0].length; i++) {
+        productList += `<p>${products[0][i]}: ${products[1][i]} units</p>`;
+      }
+      document.getElementById('farmerProducts').innerHTML = productList;
+    }
+
+    // Load Farmer Products on Page Load
+    window.onload = getFarmerProducts;
+  </script>
+
+  <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.3/dist/umd/popper.min.js"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>
